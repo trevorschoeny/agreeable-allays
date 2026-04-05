@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "agreeable-allays",
+  "version": "1.0.0",
+  "name": "Agreeable Allays",
+  "description": "Making allays more agreeable.",
+  "authors": ["trevorschoeny"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.trevorschoeny.agreeableallays.AgreeableAllaysMod"],
+    "client": ["com.trevorschoeny.agreeableallays.AgreeableAllaysClient"]
+  },
+  "mixins": ["agreeable-allays.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21",
+    "menukit": ">=0.1.0"
+  }
+}
