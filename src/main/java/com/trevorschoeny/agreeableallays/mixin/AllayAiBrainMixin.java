@@ -3,7 +3,6 @@ package com.trevorschoeny.agreeableallays.mixin;
 import com.trevorschoeny.agreeableallays.access.BrainAccessor;
 import com.trevorschoeny.agreeableallays.behavior.DeliverToInventoryBehavior;
 import com.trevorschoeny.agreeableallays.behavior.StayByOwnerBehavior;
-import com.trevorschoeny.agreeableallays.AgreeableAllaysMod;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.behavior.GoAndGiveItemsToTarget;
@@ -56,36 +55,21 @@ public abstract class AllayAiBrainMixin {
         Map<Integer, Map<Activity, Set<BehaviorControl<? super Allay>>>> byPriority =
                 accessor.agreeableallays$getAvailableBehaviorsByPriority();
 
-        // Debug: dump what's in the priority map
-        for (Map.Entry<Integer, Map<Activity, Set<BehaviorControl<? super Allay>>>> entry : byPriority.entrySet()) {
-            Map<Activity, Set<BehaviorControl<? super Allay>>> activities = entry.getValue();
-            Set<BehaviorControl<? super Allay>> idleBehaviors = activities.get(Activity.IDLE);
-            if (idleBehaviors != null) {
-                for (BehaviorControl<? super Allay> b : idleBehaviors) {
-                    AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] Priority {}: {} (class: {})",
-                            entry.getKey(), b, b.getClass().getSimpleName());
-                }
-            }
-        }
-
         // Priority 1: Replace GoAndGiveItemsToTarget with DeliverToInventoryBehavior
-        boolean replaced1 = replaceBehaviorAtPriority(byPriority, 1, GoAndGiveItemsToTarget.class,
+        replaceBehaviorAtPriority(byPriority, 1, GoAndGiveItemsToTarget.class,
                 new DeliverToInventoryBehavior());
-        AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] Replace GoAndGiveItemsToTarget at priority 1: {}", replaced1);
 
-        // Priority 2: Replace StayCloseToTarget with StayByOwnerBehavior
-        // Vanilla StayCloseToTarget uses a BehaviorBuilder, so it's not a named class.
-        // Remove whatever is at priority 2 and replace with our companion positioning.
-        boolean replaced2 = replaceAnyBehaviorAtPriority(byPriority, 2, new StayByOwnerBehavior());
-        AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] Replace StayCloseToTarget at priority 2: {}", replaced2);
+        // Priority 2: Replace StayCloseToTarget with StayByOwnerBehavior.
+        // Vanilla StayCloseToTarget uses a BehaviorBuilder, so it's not a named class —
+        // we remove whatever is at priority 2 and replace with our companion positioning.
+        replaceAnyBehaviorAtPriority(byPriority, 2, new StayByOwnerBehavior());
 
         // Priority 4: Replace RunOne (random wandering group) with standalone
         // RandomStroll.fly. RunOne contained RandomStroll + SetWalkTarget + DoNothing
         // bundled together — we remove the bundle but keep RandomStroll.fly so that
         // wild (unbonded) allays still fly around naturally. StayByOwnerBehavior at
         // priority 2 handles positioning for bonded allays and will override this.
-        boolean replaced4 = replaceBehaviorAtPriority(byPriority, 4, RunOne.class, null);
-        AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] Remove RunOne at priority 4: {}", replaced4);
+        replaceBehaviorAtPriority(byPriority, 4, RunOne.class, null);
 
         // Re-add RandomStroll.fly as a standalone behavior at priority 4
         Map<Activity, Set<BehaviorControl<? super Allay>>> activitiesAt4 = byPriority.get(4);
@@ -93,7 +77,6 @@ public abstract class AllayAiBrainMixin {
             Set<BehaviorControl<? super Allay>> idleBehaviors4 = activitiesAt4.get(Activity.IDLE);
             if (idleBehaviors4 != null) {
                 idleBehaviors4.add(RandomStroll.fly(1.0f));
-                AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] Added RandomStroll.fly at priority 4");
             }
         }
     }

@@ -33,6 +33,10 @@ public abstract class AllayInteractionMixin {
     private void agreeableallays$handleInteraction(
             Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
 
+        // Only handle main-hand interactions — offhand can fire a second
+        // mobInteract call that causes double-swaps or items landing in the offhand.
+        if (hand != InteractionHand.MAIN_HAND) return;
+
         Allay allay = (Allay) (Object) this;
         SittingAllay sittingAllay = (SittingAllay) allay;
         ItemStack playerItem = player.getItemInHand(hand);

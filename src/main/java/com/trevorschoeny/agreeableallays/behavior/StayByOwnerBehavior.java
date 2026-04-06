@@ -13,8 +13,6 @@ import net.minecraft.world.entity.animal.allay.Allay;
 import com.trevorschoeny.agreeableallays.AllayHelper;
 import net.minecraft.world.phys.Vec3;
 
-import com.trevorschoeny.agreeableallays.AgreeableAllaysMod;
-
 import java.util.Map;
 import java.util.Optional;
 
@@ -91,25 +89,8 @@ public class StayByOwnerBehavior extends Behavior<Allay> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, Allay allay) {
-        boolean sitting = ((SittingAllay) allay).agreeableallays$isSitting();
-
-        // Get player directly from memory UUID instead of AllayHelper.getLikedPlayer()
-        // which has its own distance/game-mode checks that may interfere
-        Optional<java.util.UUID> likedUUID = allay.getBrain().getMemory(MemoryModuleType.LIKED_PLAYER);
-        boolean hasLikedMemory = likedUUID.isPresent();
-        boolean hasPlayer = AllayHelper.getLikedPlayer(allay).isPresent();
-
-        // Debug
-        if (allay.tickCount % 100 == 0 && hasLikedMemory && level != null) {
-            // Log the actual player UUIDs on the server for comparison
-            Object playerUUIDs = level.getServer().getPlayerList().getPlayers()
-                .stream().map(p -> p.getStringUUID()).collect(java.util.stream.Collectors.toList());
-            AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] StayByOwner checkStart: sitting={}, likedUUID={}, getLikedPlayer={}, serverPlayers={}",
-                sitting, likedUUID.orElse(null), hasPlayer, playerUUIDs);
-        }
-
-        if (sitting) return false;
-        return hasPlayer;
+        if (((SittingAllay) allay).agreeableallays$isSitting()) return false;
+        return AllayHelper.getLikedPlayer(allay).isPresent();
     }
 
     @Override
@@ -125,7 +106,6 @@ public class StayByOwnerBehavior extends Behavior<Allay> {
         this.lastRecalcTick = 0;
         this.redirectTimer = 0;
         this.lastTargetPos = allay.position();
-        AgreeableAllaysMod.LOGGER.info("[AgreeableAllays] StayByOwner STARTED for allay {}", allay.getId());
     }
 
     @Override
@@ -150,12 +130,47 @@ public class StayByOwnerBehavior extends Behavior<Allay> {
                 float t = Math.min(1.0f, ticksInCone / 100.0f);
                 float dodgeSpeed = SPEED_CLOSE + (SPEED_FAR - SPEED_CLOSE) * t * t; // quadratic ramp from 1.0 to 2.5
 
-                double behindYaw = Math.toRadians(player.getYRot() + 180.0);
+                // Target to the SIDE of the player (perpendicular to allay→player),
+                // picking whichever side is closer to "behind." This arcs the allay
+                // around the player's sphere instead of cutting through it.
                 double behindDist = Math.max(ROAM_DIST_MIN, distToAllay);
+
+                // Horizontal direction from player to allay
+                double dx = allay.getX() - player.getX();
+                double dz = allay.getZ() - player.getZ();
+                double hLen = Math.sqrt(dx * dx + dz * dz);
+                if (hLen < 0.1) { dx = 1; dz = 0; hLen = 1; }
+                dx /= hLen;
+                dz /= hLen;
+
+                // Two perpendicular directions (90° left and right of player→allay)
+                double leftX = -dz, leftZ = dx;
+                double rightX = dz, rightZ = -dx;
+
+                // "Behind" direction from the player's perspective
+                double behindYaw = Math.toRadians(player.getYRot() + 180.0);
+                double behindX = -Math.sin(behindYaw);
+                double behindZ = Math.cos(behindYaw);
+
+                // Pick the perpendicular that's more aligned with "behind"
+                double leftDot = leftX * behindX + leftZ * behindZ;
+                double rightDot = rightX * behindX + rightZ * behindZ;
+                double sideX = leftDot > rightDot ? leftX : rightX;
+                double sideZ = leftDot > rightDot ? leftZ : rightZ;
+
+                // Blend: mostly sideways at first, more "behind" as ticksInCone grows
+                // This creates a smooth arc trajectory
+                double blendT = Math.min(1.0, ticksInCone / 40.0);
+                double targetX = sideX * (1.0 - blendT) + behindX * blendT;
+                double targetZ = sideZ * (1.0 - blendT) + behindZ * blendT;
+                double tLen = Math.sqrt(targetX * targetX + targetZ * targetZ);
+                targetX /= tLen;
+                targetZ /= tLen;
+
                 Vec3 behindPos = new Vec3(
-                    player.getX() - Math.sin(behindYaw) * behindDist,
+                    player.getX() + targetX * behindDist,
                     allay.getY(),
-                    player.getZ() + Math.cos(behindYaw) * behindDist
+                    player.getZ() + targetZ * behindDist
                 );
                 lastTargetPos = behindPos;
                 allay.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
@@ -167,17 +182,20 @@ public class StayByOwnerBehavior extends Behavior<Allay> {
         // Not in cone — reset acceleration
         ticksInCone = 0;
 
-        // Sphere avoidance: if the allay is too close, push it outward
-        if (distToAllay < AVOID_SPHERE_RADIUS && distToAllay > 0.1) {
-            Vec3 awayDir = toAllay.normalize();
+        // Sphere avoidance: if the allay is too close, push it outward.
+        // Use entity-to-entity distance (not eye position) for a natural radius.
+        double entityDist = player.distanceTo(allay);
+        if (entityDist < AVOID_SPHERE_RADIUS && entityDist > 0.1) {
+            Vec3 awayDir = allay.position().subtract(player.position()).normalize();
             Vec3 pushPos = new Vec3(
                 player.getX() + awayDir.x * ROAM_DIST_MIN,
                 allay.getY(),
                 player.getZ() + awayDir.z * ROAM_DIST_MIN
             );
             lastTargetPos = pushPos;
+            // closeEnoughDist = 1 so the pathfinder actually walks to the push target
             allay.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(pushPos, SPEED_FAR, CLOSE_ENOUGH_DIST));
+                new WalkTarget(pushPos, SPEED_FAR, 1));
             return;
         }
 
