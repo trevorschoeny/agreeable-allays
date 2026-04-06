@@ -22,37 +22,41 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Design rationale — tick injection over Brain Behavior:
  *   - Teleportation should happen regardless of which brain activity is running
  *   - It's a simple distance check + position set, not a navigation behavior
- *   - A cooldown (every 20 ticks = 1 second) avoids per-tick overhead
+ *   - A cooldown (every 5 ticks = 0.25 seconds) keeps up with fast movement
+ *
+ * At elytra speed (~70 blocks/sec), checking every 0.25s keeps the allay
+ * within ~42 blocks of the player — well within entity ticking range (160).
  *
  * Conditions to skip teleport:
+ *   - Sitting (checked BEFORE cooldown — sitting allays do zero work per tick)
  *   - Client side (never)
  *   - No LIKED_PLAYER memory (unbonded)
- *   - Sitting (sitting allays stay put forever)
  *   - In detach period (has DETACH_TICKS_REMAINING — allay is about to unbond)
  *   - Player offline or in different dimension (getLikedPlayer returns empty)
- *   - Within 64 blocks (not far enough to warrant teleport)
+ *   - Within 24 blocks (not far enough to warrant teleport)
  */
 @Mixin(Allay.class)
 public abstract class AllayTeleportMixin {
 
-    // Cooldown counter — only check teleport every 20 ticks (1 second)
+    // Cooldown counter — only check teleport every 5 ticks (0.25 seconds)
     @Unique
     private int agreeableallays$teleportCooldown = 0;
 
-    // 64 blocks squared — matches vanilla wolf-like teleport threshold
+    // 24 blocks squared — StayByOwnerBehavior keeps allays within 4-16 blocks
+    // normally, so 24 only triggers during fast movement (elytra, boats, etc.)
     @Unique
-    private static final double TELEPORT_THRESHOLD_SQ = 64.0 * 64.0;
+    private static final double TELEPORT_THRESHOLD_SQ = 24.0 * 24.0;
 
     @Inject(method = "customServerAiStep", at = @At("TAIL"))
     private void agreeableallays$tickTeleportCheck(ServerLevel serverLevel, CallbackInfo ci) {
-        // Only check once per second to avoid per-tick overhead
-        if (++agreeableallays$teleportCooldown < 20) return;
-        agreeableallays$teleportCooldown = 0;
-
         Allay allay = (Allay) (Object) this;
 
-        // Skip if sitting — sitting allays stay put
+        // Sitting check BEFORE cooldown — sitting allays do zero work per tick
         if (((SittingAllay) allay).agreeableallays$isSitting()) return;
+
+        // Only check 4x/sec — fast enough for elytra, avoids per-tick overhead
+        if (++agreeableallays$teleportCooldown < 5) return;
+        agreeableallays$teleportCooldown = 0;
 
         // Skip if in detach period — allay is lingering, about to unbond
         if (allay.getBrain().getMemory(AgreeableAllaysMemory.DETACH_TICKS_REMAINING).isPresent()) return;
