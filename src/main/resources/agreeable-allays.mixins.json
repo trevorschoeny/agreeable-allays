@@ -3,7 +3,20 @@
   "minVersion": "0.8",
   "package": "com.trevorschoeny.agreeableallays.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "AllayAiBrainMixin",
+    "AllayAiDistanceMixin",
+    "AllayCollisionMixin",
+    "AllayDamageMixin",
+    "AllayInteractionMixin",
+    "AllayMemoryMixin",
+    "AllayNbtMixin",
+    "AllayParticleMixin",
+    "AllaySynchedDataMixin",
+    "AllayTeleportMixin",
+    "AllayTickMixin",
+    "BrainAccessorMixin"
+  ],
   "client": [],
   "injectors": {
     "defaultRequire": 1

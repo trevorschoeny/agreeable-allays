@@ -10,6 +10,9 @@ public class AgreeableAllaysMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // Register custom memory types before any allay brain is built
+        AgreeableAllaysMemory.register();
+
         LOGGER.info("[AgreeableAllays] Loaded successfully!");
     }
 }
