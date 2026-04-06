@@ -58,6 +58,14 @@ public abstract class AllayInteractionMixin {
         if (player.isShiftKeyDown() && isBonded) {
             boolean newSitting = !sittingAllay.agreeableallays$isSitting();
             sittingAllay.agreeableallays$setSitting(newSitting);
+            // Clear interested when sitting — sitting allays can't be interested
+            if (newSitting) {
+                brain.eraseMemory(AgreeableAllaysMemory.INTERESTED_IN_PLAYER);
+            }
+            // Stop forced dancing when un-sitting so it returns to normal movement
+            if (!newSitting) {
+                allay.setDancing(false);
+            }
             // TODO: play sit/unsit sound
             cir.setReturnValue(InteractionResult.SUCCESS);
             return;

@@ -42,6 +42,12 @@ public abstract class AllayTickMixin {
         Allay allay = (Allay) (Object) this;
         Brain<Allay> brain = allay.getBrain();
 
+        // Sitting allays cannot be interested — clear if somehow set
+        if (((SittingAllay) allay).agreeableallays$isSitting()) {
+            brain.eraseMemory(AgreeableAllaysMemory.INTERESTED_IN_PLAYER);
+            return;
+        }
+
         ServerPlayer lookingPlayer = null;
         boolean alreadyInterested = brain.hasMemoryValue(AgreeableAllaysMemory.INTERESTED_IN_PLAYER);
 
@@ -127,6 +133,55 @@ public abstract class AllayTickMixin {
             // No player looking — clear interested state
             brain.eraseMemory(AgreeableAllaysMemory.INTERESTED_IN_PLAYER);
             // Don't clear WALK_TARGET — the state-specific behavior will set it
+        }
+    }
+
+    /**
+     * After all brain behaviors run, enforce sitting state by killing any
+     * movement that vanilla behaviors or RandomStroll may have queued.
+     * A sitting allay stays exactly where it is — no wandering, no item pickup movement.
+     */
+    @Inject(method = "customServerAiStep", at = @At("TAIL"))
+    private void agreeableallays$enforceSitting(ServerLevel serverLevel, CallbackInfo ci) {
+        Allay allay = (Allay) (Object) this;
+        if (((SittingAllay) allay).agreeableallays$isSitting()) {
+            Brain<Allay> brain = allay.getBrain();
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            brain.eraseMemory(MemoryModuleType.NEAREST_VISIBLE_WANTED_ITEM);
+            allay.getNavigation().stop();
+            allay.setDeltaMovement(allay.getDeltaMovement().multiply(0.0, 1.0, 0.0));
+
+            // Sitting allays occasionally dance — once every ~25 seconds on average.
+            // Check every second (20 ticks), ~4% chance = roughly every 25 seconds.
+            if (allay.tickCount % 20 == 0) {
+                if (!allay.isDancing() && allay.getRandom().nextFloat() < 0.04f) {
+                    allay.setDancing(true);
+                } else if (allay.isDancing() && allay.getRandom().nextFloat() < 0.5f) {
+                    // ~50% chance per second to stop — dances last ~2 seconds
+                    allay.setDancing(false);
+                }
+            }
+        }
+    }
+
+    /**
+     * Companion allays occasionally dance while following the player.
+     * ~5% chance per second (checked every 20 ticks) to start a 3-second dance.
+     * Dancing stops automatically when the allay needs to move.
+     */
+    @Inject(method = "customServerAiStep", at = @At("TAIL"))
+    private void agreeableallays$companionIdleDance(ServerLevel serverLevel, CallbackInfo ci) {
+        Allay allay = (Allay) (Object) this;
+        if (((SittingAllay) allay).agreeableallays$isSitting()) return;
+        if (!allay.getBrain().hasMemoryValue(MemoryModuleType.LIKED_PLAYER)) return;
+        if (allay.tickCount % 20 != 0) return;
+
+        if (!allay.isDancing() && allay.getRandom().nextFloat() < 0.05f) {
+            // Start a short dance — vanilla handles the animation duration
+            allay.setDancing(true);
+        } else if (allay.isDancing() && allay.getRandom().nextFloat() < 0.33f) {
+            // ~33% chance per second to stop dancing so it doesn't go forever
+            allay.setDancing(false);
         }
     }
 

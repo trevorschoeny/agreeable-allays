@@ -62,7 +62,7 @@ public abstract class AllayParticleMixin {
 
         } else if (((SittingAllay) allay).agreeableallays$isSitting()) {
             // Allay is sitting/resting
-            particle = ParticleTypes.SMOKE;
+            particle = ParticleTypes.SCRAPE;
 
         } else if (brain.hasMemoryValue(AgreeableAllaysMemory.DETACH_TICKS_REMAINING)) {
             // Allay is in the detach countdown — particles fade out as time runs down.
