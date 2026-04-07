@@ -1,10 +1,10 @@
 package com.trevorschoeny.agreeableallays;
 
 import com.trevorschoeny.agreeableallays.access.SittingAllay;
-import com.trevorschoeny.menukit.MKFamily;
-import com.trevorschoeny.menukit.MKHudAnchor;
-import com.trevorschoeny.menukit.MKHudPanel;
-import com.trevorschoeny.menukit.MKPanel;
+import com.trevorschoeny.menukit.config.MKFamily;
+import com.trevorschoeny.menukit.hud.MKHudAnchor;
+import com.trevorschoeny.menukit.hud.MKHudPanel;
+import com.trevorschoeny.menukit.panel.MKPanel;
 import com.trevorschoeny.menukit.MenuKit;
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.KeyMapping;
