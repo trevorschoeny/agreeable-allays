@@ -38,26 +38,34 @@ public class AgreeableAllaysMod implements ModInitializer {
             // Only rescue if the player is in the same dimension
             if (player.level() != world) return;
 
-            // Teleport to the player — same random-offset logic as AllayTeleportMixin
-            // 10 attempts, ±3 X/Z, ±1 Y, skip solid blocks
-            for (int i = 0; i < 10; i++) {
-                int offsetX = allay.getRandom().nextIntBetweenInclusive(-3, 3);
-                int offsetZ = allay.getRandom().nextIntBetweenInclusive(-3, 3);
-                int offsetY = allay.getRandom().nextIntBetweenInclusive(-1, 1);
+            // Defer the teleport to the next tick — teleportTo() during ENTITY_UNLOAD
+            // causes "Entity is already tracked!" because the entity is still registered
+            // in the old chunk's tracker when it gets added to the new one.
+            ((ServerLevel) world).getServer().execute(() -> {
+                // Re-check the allay is still alive after the tick delay
+                if (allay.isRemoved()) return;
 
-                // Avoid teleporting directly on top of the player
-                if (Math.abs(offsetX) < 2 && Math.abs(offsetZ) < 2) continue;
+                // Teleport to the player — same random-offset logic as AllayTeleportMixin
+                // 10 attempts, ±3 X/Z, ±1 Y, skip solid blocks
+                for (int i = 0; i < 10; i++) {
+                    int offsetX = allay.getRandom().nextIntBetweenInclusive(-3, 3);
+                    int offsetZ = allay.getRandom().nextIntBetweenInclusive(-3, 3);
+                    int offsetY = allay.getRandom().nextIntBetweenInclusive(-1, 1);
 
-                BlockPos target = player.blockPosition().offset(offsetX, offsetY, offsetZ);
+                    // Avoid teleporting directly on top of the player
+                    if (Math.abs(offsetX) < 2 && Math.abs(offsetZ) < 2) continue;
 
-                // Safety: don't teleport into a solid block
-                if (world.getBlockState(target).isSolid()) continue;
+                    BlockPos target = player.blockPosition().offset(offsetX, offsetY, offsetZ);
 
-                // Teleport to center of block
-                allay.teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
-                allay.getNavigation().stop();
-                break;
-            }
+                    // Safety: don't teleport into a solid block
+                    if (world.getBlockState(target).isSolid()) continue;
+
+                    // Teleport to center of block
+                    allay.teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+                    allay.getNavigation().stop();
+                    break;
+                }
+            });
         });
 
         LOGGER.info("[AgreeableAllays] Loaded successfully!");
