@@ -9,6 +9,9 @@ import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.allay.Allay;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -66,6 +69,14 @@ public abstract class AllayTickMixin {
             boolean lookingAtAllay = viewVec.dot(toAllay) > Math.cos(Math.toRadians(coneDeg));
             if (!lookingAtAllay) continue;
 
+            // Line-of-sight check — can't interest an allay through a solid block.
+            // Uses VISUAL shape so sight passes through glass, ice, and other see-through
+            // blocks (their visual shape is empty) but still blocks through solid walls.
+            BlockHitResult hitResult = serverLevel.clip(new ClipContext(
+                    player.getEyePosition(), allay.position(),
+                    ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, player));
+            if (hitResult.getType() == HitResult.Type.BLOCK) continue;
+
             // Shift + look initiates Interest. Once interested, gaze alone sustains it.
             if (alreadyInterested && player.getUUID().equals(
                     brain.getMemory(AgreeableAllaysMemory.INTERESTED_IN_PLAYER).orElse(null))) {
@@ -91,9 +102,19 @@ public abstract class AllayTickMixin {
                     eyePos.z + playerLook.z * 2.0
             );
 
+            // If the target point is inside a solid block (e.g. player looking through
+            // a glass pane), don't move the allay — it would clip into the block.
+            net.minecraft.core.BlockPos targetBlock = net.minecraft.core.BlockPos.containing(targetPos);
+            boolean targetInSolid = !serverLevel.getBlockState(targetBlock)
+                    .getCollisionShape(serverLevel, targetBlock).isEmpty();
+
             double distToTarget = allay.position().distanceTo(targetPos);
 
-            if (distToTarget > 6.0) {
+            if (targetInSolid) {
+                // Target is inside a block — hold position, don't move
+                allay.getNavigation().stop();
+                brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            } else if (distToTarget > 6.0) {
                 // Far: pathfind at full speed
                 brain.setMemory(MemoryModuleType.WALK_TARGET,
                         new WalkTarget(targetPos, 2.25f, 2));
@@ -106,6 +127,19 @@ public abstract class AllayTickMixin {
                         currentPos.y + (targetPos.y - currentPos.y) * lerpFactor,
                         currentPos.z + (targetPos.z - currentPos.z) * lerpFactor
                 );
+
+                // Don't lerp through blocks — raycast from current position to the
+                // lerp target and clamp to just before the hit point if obstructed.
+                BlockHitResult moveHit = serverLevel.clip(new ClipContext(
+                        currentPos, newPos,
+                        ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, allay));
+                if (moveHit.getType() == HitResult.Type.BLOCK) {
+                    // Stop just before the block face (0.1 back along the direction)
+                    Vec3 hitPos = moveHit.getLocation();
+                    Vec3 dir = newPos.subtract(currentPos).normalize();
+                    newPos = hitPos.subtract(dir.scale(0.1));
+                }
+
                 allay.setPos(newPos);
                 allay.setDeltaMovement(Vec3.ZERO);
                 allay.getNavigation().stop();
